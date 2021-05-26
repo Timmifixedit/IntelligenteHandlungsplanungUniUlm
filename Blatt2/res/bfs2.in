@@ -1,0 +1,6 @@
+habeHunger,habeBanane,habeApfel;habeBirne
+habeApfel;habeHunger
+esseApfel;habeApfel;;;habeApfel,habeHunger
+esseBanane;habeBanane;;;habeBanane
+esseBirne;habeBirne;;;habeBirne
+einkaufen;;habeHunger;habeApfel,habeHunger;
