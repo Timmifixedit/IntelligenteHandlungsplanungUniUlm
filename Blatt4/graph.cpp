@@ -287,7 +287,13 @@ int main(int argc, char **argv) {
 
     FactLayer current = start;
     while (!current.satisfies(goal)) {
-        current = current.next(getValidActions(actions, current));
+        auto possibleActions = getValidActions(actions, current);
+        if (possibleActions.empty()) {
+            std::cout << -1 << std::endl;
+            return 0;
+        }
+
+        current = current.next(possibleActions);
     }
 
     std::cout << current.getDepth() << std::endl;
