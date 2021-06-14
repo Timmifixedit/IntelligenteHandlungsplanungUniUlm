@@ -1,0 +1,5 @@
+einkaufen
+bla;
+bla;
+einkaufen;habeGeld,beiSupermarkt;habeHunger;habeEssen,habeHunger;habeGeld
+geldAbheben;beiBank;habeHunger,habeGeld;habeGeld,habeHunger;

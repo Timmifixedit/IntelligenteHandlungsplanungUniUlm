@@ -1,0 +1,14 @@
+atA,verbundenAB,verbundenBA,verbundenBC,verbundenCD,verbundenDB;atB,atC,atD,verbundenAC,verbundenAD,verbundenCA,verbundenCB,verbundenDA,verbundenDC,verbundenBD
+atD;
+moveAB;verbundenAB,atA;;atB;atA
+moveAC;verbundenAC,atA;;atC;atA
+moveAD;verbundenAD,atA;;atD;atA
+moveBA;verbundenBA,atB;;atA;atB
+moveBC;verbundenBC,atB;;atC;atB
+moveBD;verbundenBD,atB;;atD;atB
+moveCA;verbundenCA,atC;;atA;atC
+moveCB;verbundenCB,atC;;atB;atC
+moveCD;verbundenCD,atC;;atD;atC
+moveDA;verbundenDA,atD;;atA;atD
+moveDB;verbundenDB,atD;;atB;atD
+moveDC;verbundenDC,atD;;atC;atD
