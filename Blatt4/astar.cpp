@@ -14,13 +14,6 @@
 #include <algorithm>
 
 namespace util {
-    // stolen from https://stackoverflow.com/questions/28367913/how-to-stdhash-an-unordered-stdpair
-    template<typename T, typename BASE_HASH>
-    void hash_combine(std::size_t &seed, T const &key) {
-        BASE_HASH hasher;
-        seed ^= hasher(key) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    }
-
     template<typename T>
     struct Identity {
         T &operator()(T &t) const {
@@ -175,19 +168,6 @@ namespace searchGraph {
     };
 
     class FactLayer {
-    private:
-        struct PairHash {
-            std::size_t operator()(const std::pair<Fact, Fact> &elem) const {
-                std::size_t seed1 = 0;
-                util::hash_combine<Fact, Fact::Hash>(seed1, elem.first);
-                util::hash_combine<Fact, Fact::Hash>(seed1, elem.second);
-                std::size_t seed2 = 0;
-                util::hash_combine<Fact, Fact::Hash>(seed1, elem.second);
-                util::hash_combine<Fact, Fact::Hash>(seed1, elem.first);
-                return std::min(seed1, seed2);
-            }
-        };
-
     public:
         FactLayer(FactMap facts, std::size_t depth) : facts(std::move(facts)), depth(depth) {}
 
@@ -210,31 +190,23 @@ namespace searchGraph {
         }
 
         bool independent(const Fact &f1, const Fact &f2) const {
-            auto lookup = independenceCache.find({f1, f2});
-            if (lookup != independenceCache.end()) {
-                return lookup->second;
-            }
-
             const auto res1 = facts.find(f1);
             const auto res2 = facts.find(f2);
             assert(res1 != facts.end() && res2 != facts.end());
             const auto &sourceF1 = res1->second;
             const auto &sourceF2 = res2->second;
             if (sourceF1.empty() || sourceF2.empty()) {
-                independenceCache.emplace(std::make_pair(f1, f2), true);
                 return true;
             }
 
             for (const auto& a1 : sourceF1) {
                 for (const auto& a2 : sourceF2) {
                     if (a1->independent(*a2)) {
-                        independenceCache.emplace(std::make_pair(f1, f2), true);
                         return true;
                     }
                 }
             }
 
-            independenceCache.emplace(std::make_pair(f1, f2), false);
             return false;
         }
 
@@ -276,7 +248,6 @@ namespace searchGraph {
 
     private:
         FactMap facts;
-        mutable std::unordered_map<std::pair<Fact, Fact>, bool, PairHash> independenceCache{};
         std::size_t depth;
     };
 
@@ -296,19 +267,30 @@ namespace searchGraph {
         return ret;
     }
 
-    std::size_t hFunction(const FactLayer &start, const FactLayer &goal,
-                          const std::vector<cActionPtr> &actionPool) {
-        FactLayer current = start;
-        while (!current.satisfies(goal)) {
-            auto possibleActions = getValidActions(actionPool, current);
+    auto buildGraph(const FactLayer &start, const FactLayer &goal, const std::vector<cActionPtr> &actionPool)
+        -> std::vector<FactLayer> {
+        std::vector<FactLayer> graph = {start};
+        while (!graph.back().satisfies(goal)) {
+            auto possibleActions = getValidActions(actionPool, graph.back());
             if (possibleActions.empty()) {
-                return std::numeric_limits<std::size_t>::max();
+                return {};
             }
 
-            current = current.next(possibleActions);
+            graph.emplace_back(graph.back().next(possibleActions));
         }
 
-        return current.getDepth();
+        return graph;
+    }
+
+    long distEstimate(const FactLayer &current, const std::vector<FactLayer> &graph) {
+        auto it = graph.rbegin();
+        long distance = -1;
+        while (it != graph.rend() && it->satisfies(current)) {
+            ++distance;
+            ++it;
+        }
+
+        return distance;
     }
 
 }
@@ -446,36 +428,40 @@ int main(int argc, char **argv) {
     std::string line;
     std::getline(in, line);
     const searchSpace::State start(line);
+    const auto startLayer = searchSpace::toFactLayer(start.getPredicates());
     std::getline(in, line);
     const searchSpace::State goal(line);
     const auto goalLayer = searchSpace::toFactLayer(goal.getPredicates());
-    std::vector<searchGraph::cActionPtr> actionPool;
     std::vector<searchSpace::Action> actions;
+    std::vector<searchGraph::cActionPtr> actionPool;
     while (std::getline(in, line)) {
         actionPool.emplace_back(std::make_shared<searchGraph::Action>(line));
         actions.emplace_back(line);
     }
 
+    auto planGraph = searchGraph::buildGraph(startLayer, goalLayer, actionPool);
+    if (planGraph.empty()) {
+        std::cout << -1 << std::endl;
+        return 0;
+    }
+
     std::deque<std::pair<searchSpace::State, std::size_t>> fringe = {{start, std::numeric_limits<std::size_t>::max()}};
-    std::vector<searchSpace::State> visited = {start};
     while (!fringe.empty()) {
-        auto current = std::move(fringe.front());
+        auto current = std::move(fringe.front().first);
         fringe.pop_front();
-        if (current.first.isSolutionOf(goal)) {
-            std::cout << current.first.getPathLen() << std::endl;
+        if (current.isSolutionOf(goal)) {
+            std::cout << current.getPathLen() << std::endl;
             return 0;
         }
 
         for (const auto &action : actions) {
-            if (action.applicable(current.first)) {
-                auto successor = action.applyTo(current.first);
-                auto res = std::find(visited.begin(), visited.end(), successor);
-                if (res == visited.end()) {
-                    visited.emplace_back(successor);
-                    auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
-                    auto f = searchGraph::hFunction(tmpLayer, goalLayer, actionPool) + successor.getPathLen();
-                    fringe.emplace_back(std::move(successor), f);
-                }
+            if (action.applicable(current)) {
+                auto successor = action.applyTo(current);
+                auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
+                long h = searchGraph::distEstimate(tmpLayer, planGraph);
+                assert(h >= 0);
+                auto f = h + successor.getPathLen();
+                fringe.emplace_back(std::move(successor), f);
             }
         }
 
