@@ -324,10 +324,9 @@ namespace searchSpace {
 
     class State {
     public:
-        State(PredList preds, std::size_t pathLen, std::size_t eta) :
-            predicates(std::move(preds)), pathLen(pathLen), eta(eta) {}
+        State(PredList preds, std::size_t pathLen) : predicates(std::move(preds)), pathLen(pathLen) {}
 
-        explicit State(const std::string &spec) : pathLen(0), eta(std::numeric_limits<std::size_t>::max()) {
+        explicit State(const std::string &spec) : pathLen(0) {
             auto posNegList = util::splitString(spec, ';');
             if (posNegList.size() == 1) {
                 posNegList.emplace_back("");
@@ -357,22 +356,17 @@ namespace searchSpace {
             return true;
         }
 
-        std::size_t fValue() const {
-            return pathLen + eta;
-        }
-
         std::size_t getPathLen() const {
             return pathLen;
         }
 
-        std::size_t getEta() const {
-            return eta;
+        bool operator==(const State &other) const {
+            return predicates == other.getPredicates();
         }
 
     private:
         PredList predicates;
         std::size_t pathLen;
-        std::size_t eta;
     };
 
     auto toFactLayer(const PredList &preds) -> searchGraph::FactLayer {
@@ -419,8 +413,7 @@ namespace searchSpace {
             return true;
         }
 
-        State applyTo(const State &state, const std::vector<searchGraph::cActionPtr> &actionPool,
-                      const searchGraph::FactLayer &goal) const {
+        State applyTo(const State &state) const {
             assert(applicable(state));
             PredList preds = state.getPredicates();
 
@@ -428,11 +421,7 @@ namespace searchSpace {
                 preds[effect.first] = effect.second;
             }
 
-
-
-            auto layer = toFactLayer(preds);
-            std::size_t eta = searchGraph::hFunction(layer, goal, actionPool);
-            return State(std::move(preds), state.getPathLen() + 1, eta);
+            return State(std::move(preds), state.getPathLen() + 1);
         }
 
     private:
@@ -467,28 +456,30 @@ int main(int argc, char **argv) {
         actions.emplace_back(line);
     }
 
-    std::deque<searchSpace::State> fringe = {start};
+    std::deque<std::pair<searchSpace::State, std::size_t>> fringe = {{start, std::numeric_limits<std::size_t>::max()}};
     std::vector<searchSpace::State> visited = {start};
     while (!fringe.empty()) {
         auto current = std::move(fringe.front());
         fringe.pop_front();
-        if (current.isSolutionOf(goal)) {
-            std::cout << current.getPathLen() << std::endl;
+        if (current.first.isSolutionOf(goal)) {
+            std::cout << current.first.getPathLen() << std::endl;
             return 0;
         }
 
         for (const auto &action : actions) {
-            if (action.applicable(current)) {
-                auto successor = action.applyTo(current, actionPool, goalLayer);
+            if (action.applicable(current.first)) {
+                auto successor = action.applyTo(current.first);
                 auto res = std::find(visited.begin(), visited.end(), successor);
                 if (res == visited.end()) {
                     visited.emplace_back(successor);
-                    fringe.emplace_back(std::move(successor));
+                    auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
+                    auto f = searchGraph::hFunction(tmpLayer, goalLayer, actionPool) + successor.getPathLen();
+                    fringe.emplace_back(std::move(successor), f);
                 }
             }
         }
 
-        std::sort(fringe.begin(), fringe.end(), [](const auto &a, const auto &b) { return a.fValue() < b.fValue(); });
+        std::sort(fringe.begin(), fringe.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
     }
 
     std::cout << -1 << std::endl;
