@@ -446,6 +446,7 @@ int main(int argc, char **argv) {
     }
 
     std::deque<std::pair<searchSpace::State, std::size_t>> fringe = {{start, std::numeric_limits<std::size_t>::max()}};
+    std::vector<searchSpace::State> visited = {start};
     while (!fringe.empty()) {
         auto current = std::move(fringe.front().first);
         fringe.pop_front();
@@ -457,11 +458,15 @@ int main(int argc, char **argv) {
         for (const auto &action : actions) {
             if (action.applicable(current)) {
                 auto successor = action.applyTo(current);
-                auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
-                long h = searchGraph::distEstimate(tmpLayer, planGraph);
-                assert(h >= 0);
-                auto f = h + successor.getPathLen();
-                fringe.emplace_back(std::move(successor), f);
+                auto lookup = std::find(visited.begin(), visited.end(), successor);
+                if (lookup == visited.end()) {
+                    auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
+                    long h = searchGraph::distEstimate(tmpLayer, planGraph);
+                    assert(h >= 0);
+                    auto f = h + successor.getPathLen();
+                    visited.emplace_back(successor);
+                    fringe.emplace_back(std::move(successor), f);
+                }
             }
         }
 
