@@ -272,7 +272,8 @@ namespace searchGraph {
         std::vector<FactLayer> graph = {start};
         while (!graph.back().satisfies(goal)) {
             auto possibleActions = getValidActions(actionPool, graph.back());
-            if (possibleActions.empty()) {
+            // Only No-Ops can be performed => Graph becomes infinitely long!
+            if (possibleActions.size() == graph.back().getFacts().size()) {
                 return {};
             }
 
@@ -293,6 +294,14 @@ namespace searchGraph {
         return distance;
     }
 
+    long distEstimate(const FactLayer &start, const FactLayer &goal, const std::vector<cActionPtr> &actionPool) {
+        auto graph = buildGraph(start, goal, actionPool);
+        if (graph.empty()) {
+            return -1;
+        }
+
+        return static_cast<long>(graph.back().getDepth());
+    }
 }
 
 namespace searchSpace {
@@ -461,9 +470,11 @@ int main(int argc, char **argv) {
                 auto lookup = std::find(visited.begin(), visited.end(), successor);
                 if (lookup == visited.end()) {
                     auto tmpLayer = searchSpace::toFactLayer(successor.getPredicates());
-                    long h = searchGraph::distEstimate(tmpLayer, planGraph);
-                    assert(h >= 0);
-                    auto f = h + successor.getPathLen();
+                    long h_ = searchGraph::distEstimate(tmpLayer, planGraph);
+                    long h = searchGraph::distEstimate(tmpLayer, goalLayer, actionPool);
+                    assert(h_ >= 0 && h >= 0);
+                    std::cout << "h = " << h << ", h' = " << h_ << std::endl;
+                    auto f = h_ + successor.getPathLen();
                     visited.emplace_back(successor);
                     fringe.emplace_back(std::move(successor), f);
                 }
